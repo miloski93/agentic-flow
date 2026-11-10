@@ -1,0 +1,12 @@
+{
+  "name": "flow-local",
+  "description": "Single-plugin marketplace for flow, a test-driven development pipeline for Claude Code and opencode.",
+  "owner": { "name": "miloski93" },
+  "plugins": [
+    {
+      "name": "flow",
+      "source": "./flow",
+      "description": "Opinionated local development pipeline: shape, plan, build, check, qa, fix, ship. Test-driven, reuse-first, with hostile security, future-proofing and over-engineering review."
+    }
+  ]
+}

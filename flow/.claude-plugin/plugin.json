@@ -1,0 +1,7 @@
+{
+  "name": "flow",
+  "version": "0.4.0",
+  "description": "Development pipeline with per-phase clean context. Shape an idea against hostile domain critics, plan into test-first tasks with the superpowers writing-plans skill, build with one TDD subagent per task, verify end to end, build and run an exhaustive Playwright suite, fix accepted findings, then prepare the branch for review.",
+  "author": { "name": "miloski93", "url": "https://github.com/miloski93" },
+  "keywords": ["workflow", "tdd", "playwright", "review", "security", "planning"]
+}
