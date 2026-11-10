@@ -1,0 +1,55 @@
+# flowpipe global config. Copy to:
+#   Linux / macOS   ~/.config/flowpipe/flow.yaml
+#   Windows         %APPDATA%\flowpipe\flow.yaml   (or ~/.config/flowpipe/flow.yaml)
+#
+# flowpipe never writes inside a repository. Checkpoints and engine logs live
+# in its state directory, one checkpoint DB per repo path.
+# Run `flowpipe where` inside any repo to see what it resolves to.
+
+engine: opencode                       # or remove to auto-detect via detect_order
+detect_order: [opencode, claude]
+
+# Defaults applied to every repo:
+test_command: "pytest -x -q"           # the project's REAL full suite
+max_cycles: 5                          # build / fix / check runs before the cycle gate asks you
+max_task_chars: 8000                   # preflight gates unfinished plan task blocks bigger than this
+qa_policy: auto                        # auto = when check reports ui_touched | always | never
+triage_policy: human                   # human = you pick the findings to fix
+                                       # auto  = every High finding and product bug goes straight to /flow:fix
+require_ce_review: false               # true: a check that ran without ce-code-review is not CLEAR
+
+# Route single phases to a different engine, e.g. review on Claude Code while
+# another model builds:
+# phase_engines:
+#   check: claude
+
+# Per-project overrides. Keys are matched against the repo root; the longest
+# matching pattern wins. Globs and ~ are supported.
+projects:
+  # "~/projects/my-api":
+  #   test_command: "uv run pytest -q && uv run ruff check"
+  #   qa_policy: never
+  # "~/projects/*-frontend":
+  #   test_command: "npm test --silent"
+  #   qa_policy: always
+  #   triage_policy: auto
+
+engines:
+  opencode:
+    binary: opencode
+    invoke: template                   # renders <commands_dir>/flow-<cmd>.md into the prompt
+    commands_dir: "~/.config/opencode/commands"
+    timeout: 7200
+    cmd: [opencode, run, --agent, build, "{prompt}"]
+    # To pin a model: set `model:` and add `--model, "{model}"` to cmd.
+
+  claude:
+    binary: claude
+    invoke: slash                      # claude -p runs /flow:* natively
+    slash_prefix: "/flow:"
+    extra_flag: --append-system-prompt # carries the operator note; never append it to the slash prompt
+    timeout: 7200
+    # acceptEdits approves file edits only. Headless, every other command is
+    # rejected, so allow the ones your test_command and git workflow need:
+    cmd: [claude, -p, "{prompt}", --permission-mode, acceptEdits,
+          --allowedTools, "Bash(git:*)", "Bash(pytest:*)", "Bash(python -m pytest:*)"]

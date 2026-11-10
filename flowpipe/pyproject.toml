@@ -1,0 +1,23 @@
+[project]
+name = "flowpipe"
+version = "3.2.0"
+description = "LangGraph orchestrator for the flow plugin: build, test, check, qa, fix and ship with hash-enforced re-verification and human gates"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["langgraph>=1.0", "langgraph-checkpoint-sqlite>=2.0", "pyyaml>=6.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+flowpipe = "flowpipe.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["flowpipe"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

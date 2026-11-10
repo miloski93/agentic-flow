@@ -16,6 +16,38 @@ context between phases, so every phase starts near-empty and nothing is lost.
 
 In opencode the same commands are `/flow-shape`, `/flow-plan`, and so on.
 
+```mermaid
+flowchart TD
+    idea(["idea"]) --> shape
+    subgraph you[" "]
+        shape["/flow:shape<br/>concept.md"] --> plan["/flow:plan<br/>plan.md"]
+    end
+    subgraph auto[" "]
+        build["/flow:build<br/>one commit per task"] --> check["/flow:check<br/>check.md"]
+        check -->|BLOCKED| fix["/flow:fix<br/>fixlist.md"]
+        fix --> check
+        check -->|"CLEAR, UI touched"| qa["/flow:qa<br/>Playwright suite, qa.md"]
+        qa -->|"product bugs"| fix
+        check -->|CLEAR| ship["/flow:ship<br/>commit msg, changelog, MR text"]
+        qa -->|clean| ship
+    end
+    plan --> build
+    ship --> review(["you commit, push and open the MR"])
+
+    classDef human fill:#fef3c7,stroke:#d97706,color:#78350f
+    classDef phase fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+    classDef terminal fill:#f3f4f6,stroke:#9ca3af,color:#111827
+    class shape,plan human
+    class build,check,fix,qa,ship phase
+    class idea,review terminal
+```
+
+Amber phases are interactive: you answer questions and approve. Blue phases
+run on their own, one at a time by hand or all of them with
+[`flowpipe run <slug>`](#running-it-unattended-flowpipe). Each box is one
+command and one artifact in `.work/<slug>/`. Clear the context between boxes:
+the artifact carries everything the next phase needs.
+
 ## Requirements
 
 - Claude Code 2.1.275 or later, or opencode.
@@ -206,6 +238,19 @@ The `flow-rules` skill is loaded at the start of each command:
 Reuse is enforced in three places so it survives a fresh context: the rules
 above, a required `**Reuse:**` line per task in `/flow:plan`, and the
 `flow-simplify` review, which treats an ignored Reuse line as a High finding.
+
+## Running it unattended: flowpipe
+
+[`flowpipe/`](flowpipe/README.md) is a LangGraph orchestrator that drives the
+phases for you once the plan is approved:
+
+    flowpipe run <slug>
+
+It runs build, the test suite, check, qa and fix in a loop, re-verifies by
+working-tree fingerprint instead of trusting agent summaries, and stops for you
+at triage, at a stalled engine, at the cycle cap and before shipping. It reads
+the frontmatter of `check.md` and `qa.md`, so keep those keys stable when you
+edit the commands.
 
 ## Optional TDD guard hook
 
