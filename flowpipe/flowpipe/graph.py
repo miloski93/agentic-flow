@@ -26,6 +26,7 @@ same node with the operator's answer attached.
 """
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -33,16 +34,36 @@ from langgraph.graph import END, START, StateGraph
 
 from . import artifacts as art
 from .config import FlowConfig
-from .engines import detect_engine
+from .engines import EngineError, detect_engine
+from .models import load_profile
 from .nodes import make_nodes
+from .render import render
 from .state import FlowState
 from .tree import working_tree_hash
 
 
 def build_graph(cfg: FlowConfig):
     def resolve_engine(phase: str, state: FlowState):
-        preferred = cfg.phase_engines.get(phase) or state.get("engine") or cfg.engine
-        return detect_engine(cfg.engines, preferred, cfg.detect_order)
+        """The engine for one phase. A model profile, when one applies, decides
+        the engine and the session model, and is rendered here so the subagents
+        on disk always match the plugin source and the profile."""
+        name = cfg.phase_profiles.get(phase) or state.get("profile") or (
+            None if state.get("engine") else cfg.profile)
+        if not name:
+            preferred = cfg.phase_engines.get(phase) or state.get("engine") or cfg.engine
+            return detect_engine(cfg.engines, preferred, cfg.detect_order)
+        try:
+            profile = load_profile(name)
+            rendered = render(profile)
+        except ValueError as e:
+            raise EngineError(str(e))
+        spec = detect_engine(cfg.engines, profile.engine, [])
+        return replace(
+            spec,
+            model=profile.session or spec.model,
+            commands_dir=rendered.commands_dir or spec.commands_dir,
+            extra_args=rendered.extra_args,
+        )
 
     nodes = make_nodes(cfg, resolve_engine)
     g = StateGraph(FlowState)

@@ -1,6 +1,6 @@
 {
   "name": "flow-local",
-  "description": "Single-plugin marketplace for flow, a test-driven development pipeline for Claude Code and opencode.",
+  "description": "Single-plugin marketplace for flow, a test-driven development pipeline for Claude Code, opencode and Codex.",
   "owner": { "name": "miloski93" },
   "plugins": [
     {

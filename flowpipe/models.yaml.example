@@ -1,0 +1,49 @@
+# Model profiles for the flow plugin. Copy to:
+#   Linux / macOS   ~/.config/flowpipe/models.yaml
+#   Windows         %APPDATA%\flowpipe\models.yaml   (or ~/.config/flowpipe/models.yaml)
+# or point $FLOW_MODELS at any path.
+#
+# The plugin never names a model. It names a TIER (fast, standard, strong);
+# a profile says which model each tier means on one platform. Apply a profile
+# with `flowpipe render <profile>`; `flowpipe run --profile <profile>` renders
+# by itself before every phase.
+
+# Which tier each subagent runs on, shared by every profile. A subagent that is
+# not listed inherits the session model.
+agents:
+  flow-impl: standard          # implementer for /flow:fix and for tasks without a **Model:** line
+  flow-critic: strong
+  flow-sec: strong
+  flow-future: standard
+  flow-simplify: standard
+  flow-e2e: standard
+  flow-qa: standard
+
+profiles:
+  # One profile per platform + account you use. The name is yours to choose.
+  claude:
+    platform: claude           # claude | opencode | codex
+    session: opus              # model of the phase session itself (optional;
+                               # flowpipe passes it to the CLI)
+    tiers:
+      fast: haiku
+      standard: sonnet
+      strong: opus
+
+  opencode-api:                # opencode with a provider you hold an API key for
+    platform: opencode
+    session: anthropic/claude-sonnet-5-5
+    tiers:
+      fast: anthropic/claude-haiku-5-5
+      standard: anthropic/claude-sonnet-5-5
+      strong: anthropic/claude-opus-5-5
+    agents:                    # optional: additions to the shared map above
+      flow-qa: fast
+
+  codex:
+    platform: codex
+    # engine: codex            # the flow.yaml engine to run it with (default: the platform name)
+    tiers:
+      # A tier you leave out inherits the session model, so a profile with a
+      # single model needs no tiers at all.
+      strong: your-strongest-codex-model

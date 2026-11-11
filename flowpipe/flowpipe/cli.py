@@ -2,6 +2,8 @@
 
   flowpipe run <slug>                    # new run, from an approved plan to ship artifacts
   flowpipe run --engine claude <slug>    # force an engine
+  flowpipe run --profile <name> <slug>   # run on a model profile from models.yaml
+  flowpipe render <profile>              # write a profile's subagents for its platform
   flowpipe resume <thread-id>            # continue after Ctrl-C / reboot / an engine failure
   flowpipe status [thread-id]            # where a run stands
   flowpipe threads                       # list past runs
@@ -77,8 +79,14 @@ def main(argv: list[str] | None = None) -> int:
 
     p_run = sub.add_parser("run", help="start a new pipeline run")
     p_run.add_argument("slug", help="feature slug (must have .work/<slug>/concept.md and plan.md)")
-    p_run.add_argument("--engine", default=None, help="an engine name from flow.yaml, e.g. opencode or claude")
+    how = p_run.add_mutually_exclusive_group()
+    how.add_argument("--engine", default=None, help="an engine name from flow.yaml, e.g. opencode or claude")
+    how.add_argument("--profile", default=None, help="a model profile from models.yaml, or a bare platform name")
     p_run.add_argument("--thread", default=None, help="thread id (default: random)")
+
+    p_rn = sub.add_parser("render", help="render the flow plugin for a platform, with a profile's models")
+    p_rn.add_argument("profile", help="a model profile from models.yaml, or a bare platform name "
+                                      "(claude, opencode, codex) for a render without models")
 
     p_res = sub.add_parser("resume", help="resume an interrupted run")
     p_res.add_argument("thread", help="thread id printed when the run started")
@@ -124,13 +132,37 @@ def main(argv: list[str] | None = None) -> int:
                 pass
         return 0
 
+    if args.cmd == "render":
+        from .models import load_profile, models_path
+        from .render import render
+        try:
+            profile = load_profile(args.profile)
+            rendered = render(profile)
+        except ValueError as e:
+            print(f"[flowpipe] {e}", file=sys.stderr)
+            return 1
+        print(f"Rendered profile '{profile.name}' for {profile.platform} (models: {models_path()})")
+        for agent, tier in sorted(profile.agents.items()):
+            print(f"  {agent:<14} {tier:<9} {profile.tiers.get(tier) or '(session model)'}")
+        for tier, model in profile.tiers.items():
+            print(f"  flow-impl-{tier:<9} {model}")
+        for path in rendered.written:
+            print(f"  wrote {path}")
+        if profile.platform == "claude":
+            print(f"Load it with: claude --plugin-dir \"{rendered.extra_args[1]}\"")
+        return 0
+
     if args.cmd == "where":
         from .config import repo_root
+        from .models import models_path
         print(f"repo root      : {repo_root()}")
         print(f"config file    : {cfg.source or '(none found - using built-in defaults)'}")
         if cfg.project_match:
             print(f"project match  : {cfg.project_match}")
         print(f"checkpoint db  : {cfg.checkpoint_db}")
+        if cfg.profile or cfg.phase_profiles:
+            per_phase = "".join(f"  {k}: {v}" for k, v in cfg.phase_profiles.items())
+            print(f"model profile  : {cfg.profile or '(none)'}{per_phase}   ({models_path()})")
         print(f"engine         : {cfg.engine or 'auto: ' + ', '.join(cfg.detect_order)}")
         print(f"test command   : {cfg.test_command}")
         print(f"qa policy      : {cfg.qa_policy}   triage policy: {cfg.triage_policy}   "
@@ -204,6 +236,7 @@ def main(argv: list[str] | None = None) -> int:
             initial = {
                 "slug": args.slug,
                 "engine": args.engine or "",
+                "profile": args.profile or "",
                 "cycles": 0,
                 "max_cycles": cfg.max_cycles,
             }

@@ -58,6 +58,22 @@ In addition, every task block carries one extra line directly under **Files:**
 A Reuse line saying "none" without naming the terms searched is an incomplete
 task. Write the terms.
 
+Every task block also carries, directly under **Reuse:**
+
+  **Model:** <fast | standard | strong> - <why, in ten words or fewer>
+
+This names a tier, never a model. Which model a tier means is decided by the
+model profile of whoever runs /flow:build, so the plan works on any platform.
+Judge each task on its own:
+  - fast: mechanical work. One file, no new interface, and the Reuse line
+    names an existing pattern the task copies.
+  - strong: a new interface other tasks consume, changes across several
+    modules, concurrency, migrations of real data, or security-sensitive code
+    (auth, permissions, input handling, secrets).
+  - standard: everything else.
+Between two tiers, pick the higher one. A wrongly cheap task costs a failed
+build step; a wrongly expensive one costs a few tokens.
+
 Design rules, applied to every task before you write it down:
   - Does this need to exist at all? If not, drop the task.
   - Does something in this codebase already do it? Extend that instead.
@@ -87,8 +103,9 @@ Then add these three flow checks and write the answers down:
 
 STEP 6 - APPROVAL
 Present the task list as a compact table:
-  # | title | files | reuse | test command
-Wait for my explicit approval. If I ask for changes, revise plan.md and present
+  # | title | files | reuse | model tier | test command
+Wait for my explicit approval. I may change a task's tier; write my choice into
+its **Model:** line. If I ask for changes, revise plan.md and present
 again.
 
 STEP 7 - STOP

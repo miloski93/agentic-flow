@@ -43,6 +43,7 @@ DEFAULT_ENGINES: dict[str, dict] = {
         "invoke": "template",
         "commands_dir": "~/.config/opencode/commands",
         "cmd": ["opencode", "run", "--agent", "build", "{prompt}"],   # opencode's own default model
+        "model_args": ["--model", "{model}"],
     },
     "claude": {
         "binary": "claude",
@@ -50,6 +51,13 @@ DEFAULT_ENGINES: dict[str, dict] = {
         "slash_prefix": "/flow:",
         "extra_flag": "--append-system-prompt",
         "cmd": ["claude", "-p", "{prompt}", "--permission-mode", "acceptEdits"],
+        "model_args": ["--model", "{model}"],
+    },
+    "codex": {
+        "binary": "codex",
+        "invoke": "template",              # commands_dir comes from the profile's render
+        "cmd": ["codex", "exec", "--sandbox", "workspace-write", "{prompt}"],
+        "model_args": ["--model", "{model}"],
     },
 }
 
@@ -87,6 +95,8 @@ class FlowConfig:
     detect_order: list[str] = field(default_factory=lambda: list(DEFAULT_DETECT_ORDER))
     engines: dict[str, EngineSpec] = field(default_factory=dict)
     phase_engines: dict[str, str] = field(default_factory=dict)
+    profile: str | None = None                                   # model profile for every phase
+    phase_profiles: dict[str, str] = field(default_factory=dict)
     test_command: str = "pytest -x -q"
     max_cycles: int = 5
     max_task_chars: int = 8000
@@ -175,6 +185,7 @@ def load_config(root: Path | None = None) -> FlowConfig:
             extra_flag=str(s.get("extra_flag", "")),
             commands_dir=str(s.get("commands_dir", "")),
             model=str(s.get("model", "")),
+            model_args=[str(a) for a in s.get("model_args") or []],
             binary=str(s.get("binary", "")),
             timeout=int(s.get("timeout", 7200)),
             env={k: str(v) for k, v in (s.get("env") or {}).items()},
@@ -190,6 +201,8 @@ def load_config(root: Path | None = None) -> FlowConfig:
         detect_order=list(settings.get("detect_order", DEFAULT_DETECT_ORDER)),
         engines=engines,
         phase_engines={k: str(v) for k, v in (settings.get("phase_engines") or {}).items()},
+        profile=os.environ.get("FLOW_PROFILE") or settings.get("profile"),
+        phase_profiles={k: str(v) for k, v in (settings.get("phase_profiles") or {}).items()},
         test_command=str(settings.get("test_command", "pytest -x -q")),
         max_cycles=int(settings.get("max_cycles", 5)),
         max_task_chars=int(settings.get("max_task_chars", 8000)),

@@ -1,6 +1,6 @@
 # flow
 
-A test-driven development pipeline for Claude Code and opencode. Each phase
+A test-driven development pipeline for Claude Code, opencode and Codex. Each phase
 reads one artifact, does one job, writes one artifact, and stops. You clear the
 context between phases, so every phase starts near-empty and nothing is lost.
 
@@ -50,7 +50,7 @@ the artifact carries everything the next phase needs.
 
 ## Requirements
 
-- Claude Code 2.1.275 or later, or opencode.
+- Claude Code 2.1.275 or later, opencode, or Codex CLI.
 - git. Every phase works on a feature branch and diffs against the integration
   branch it was cut from.
 - Optional, used automatically when present:
@@ -80,17 +80,37 @@ Confirm: typing `/flow:` autocompletes eight commands, and `/agents` lists seven
 
 ### opencode
 
-opencode reads plain files, so clone the repo and render them:
+opencode reads plain files, so clone the repo and render them with
+[flowpipe](flowpipe/README.md), which carries the renderer:
 
-    bash scripts/render-opencode.sh
+    pip install -e flowpipe
+    flowpipe render opencode
 
 This writes `flow-*.md` into `~/.config/opencode/commands` and
-`~/.config/opencode/agents`. Then add the skills directory to `skills.paths` in
-`~/.config/opencode/opencode.json` so the shared `flow-rules` skill loads:
+`~/.config/opencode/agents` (`$OPENCODE_ROOT` overrides the directory). Then add
+the skills directory to `skills.paths` in `~/.config/opencode/opencode.json` so
+the shared `flow-rules` skill loads:
 
     "skills": { "paths": ["/path/to/this/repo/flow/skills"] }
 
 Restart opencode and type `/flow-` to confirm.
+
+### Codex
+
+Codex loads the plugin itself, commands and skill included, from the same
+marketplace:
+
+    codex plugin marketplace add /path/to/this/repo
+
+and takes its subagents as TOML files, which the renderer writes into
+`~/.codex/agents` (`$CODEX_HOME` overrides the directory):
+
+    pip install -e flowpipe
+    flowpipe render codex
+
+`opencode` and `codex` above are bare platform names: a render with no models,
+where every subagent inherits the session model. To choose models, render a
+[model profile](#model-profiles) instead.
 
 ### Per project
 
@@ -202,23 +222,89 @@ without parsing prose.
     flow-simplify   over-engineering, duplication and missed-reuse review
     flow-qa         Playwright suite author, deterministic or it says so
 
-## Per-task model routing
+## Model profiles
 
-By default every implementer runs on the session model. To pin a task, add a
-`**Model:**` line to its block in `plan.md`:
+Out of the box every subagent runs on the model of the session that dispatched
+it. A model profile changes that: it says which model each subagent uses on one
+platform, so you can keep one profile for Claude Code, one for Codex, one for
+opencode with an API-key provider, and switch between them.
 
-    **Model:** sonnet
+The plugin files never name a model. They name a **tier**:
 
-Claude Code dispatches `flow-impl` on that model (`sonnet` or `opus`). opencode
-cannot pick a model per dispatch, so the render script generates pinned
-`flow-impl-sonnet` and `flow-impl-opus` agents and the build command routes to
-them. Choose which provider models they map to when rendering:
+    fast        mechanical work that follows an existing pattern
+    standard    ordinary work
+    strong      new interfaces, cross-module changes, security-sensitive code
 
-    OPENCODE_IMPL_MODELS="sonnet=github-copilot/claude-sonnet-5.5 opus=github-copilot/claude-opus-5.5" \
-      bash scripts/render-opencode.sh
+A profile maps the tiers to the models its platform offers. Profiles live in one
+file outside the repository, `~/.config/flowpipe/models.yaml`
+(`$FLOW_MODELS` overrides the path):
 
-In opencode the `**Model:**` line may also carry the full provider model id. An
-unknown value stops the build rather than silently substituting a model.
+    agents:                      # which tier each subagent runs on
+      flow-impl: standard
+      flow-sec: strong
+      flow-critic: strong
+
+    profiles:
+      claude:
+        platform: claude         # claude | opencode | codex
+        session: opus            # model of the phase session itself (optional)
+        tiers: {fast: haiku, standard: sonnet, strong: opus}
+
+      opencode-api:
+        platform: opencode
+        session: anthropic/claude-sonnet-5-5
+        tiers:
+          fast: anthropic/claude-haiku-5-5
+          strong: anthropic/claude-opus-5-5
+
+Start from [`flowpipe/models.yaml.example`](flowpipe/models.yaml.example). The
+rules are few:
+
+- A subagent missing from `agents`, or on a tier its profile does not define,
+  gets no model and inherits the session model. A profile with one model
+  therefore needs no `tiers` at all.
+- A profile may carry its own `agents` map; it is merged over the shared one.
+- Model ids are written the way the platform expects them: an alias or full id
+  for Claude Code, `provider/model` for opencode, the model name for Codex.
+  API keys and logins stay in each tool's own configuration.
+
+### Applying a profile
+
+    flowpipe render <profile>
+
+writes the plugin's subagents, with the profile's models, where the platform
+loads them from:
+
+| Platform    | Written to | How it is loaded |
+|-------------|------------|------------------|
+| Claude Code | a complete plugin copy under flowpipe's state directory, `rendered/<profile>/` | `claude --plugin-dir <that dir>/flow`, which takes precedence over an installed flow for that session. To make it permanent, add `rendered/<profile>` as your marketplace instead of the repository. |
+| opencode    | `~/.config/opencode/agents` and `commands` | automatically |
+| Codex       | `~/.codex/agents/flow-*.toml` | automatically |
+
+opencode and Codex each hold one rendered profile at a time: rendering another
+one replaces it. `flowpipe run --profile <profile>` renders by itself before
+every phase, so an unattended run never works from a stale render.
+
+### Per-task routing
+
+`/flow:plan` gives every task a tier and a reason, and shows both in the task
+table you approve:
+
+    **Model:** fast - one file, copies the existing exporter
+
+`/flow:build` routes each task to the implementer pinned to that tier
+(`flow-impl-fast`, `flow-impl-standard`, `flow-impl-strong`; every render
+creates all three). A task that fails verification is retried once on the next
+tier up. Edit a task's `**Model:**` line to overrule the planner; remove the
+line and the task runs on plain `flow-impl`. A value that is not a tier stops
+the build.
+
+Because a plan carries tiers and not model names, a plan written on one
+platform builds unchanged on another.
+
+Without a rendered profile (a plain Claude Code marketplace install) the pinned
+implementers do not exist; build then says so and uses `flow-impl`, on the
+session model, for every task.
 
 ## Rules every phase obeys
 
@@ -266,16 +352,23 @@ The files under `flow/` are the source of truth. Edit them directly.
   or restart to pick up an edit. For a GitHub install, bump `version` in
   `flow/.claude-plugin/plugin.json`, push, and run
   `/plugin marketplace update flow-local`.
-- opencode: re-run `bash scripts/render-opencode.sh` after every edit. It
-  deletes and rewrites every `flow-*.md` it owns, so never edit those by hand.
+- Everything rendered (opencode, Codex, a Claude Code profile): re-run
+  `flowpipe render <profile>` after every edit. A render deletes and rewrites
+  every `flow-*` file it owns, so never edit those by hand.
 - Check the manifests with `claude plugin validate ./flow` and
   `claude plugin validate .`.
 
-Keep command and agent text engine-neutral: write `/flow:<cmd>` and
-`CLAUDE.md`, and the render script translates both for opencode.
+Keep command and agent text platform-neutral: write `/flow:<cmd>` and
+`CLAUDE.md`, which the renderer translates per platform, and never name a
+model: name a tier.
+
+To support another platform, add one adapter function to
+`flowpipe/flowpipe/render.py` (where its subagents live, in which format, and
+how a model is written) and its name to `PLATFORMS` in `models.py`.
 
 ## Uninstall
 
     /plugin uninstall flow@flow-local
     /plugin marketplace remove flow-local
     rm -f ~/.config/opencode/commands/flow-*.md ~/.config/opencode/agents/flow-*.md
+    rm -f ~/.codex/agents/flow-*.toml

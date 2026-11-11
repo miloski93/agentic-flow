@@ -23,6 +23,13 @@ require_ce_review: false               # true: a check that ran without ce-code-
 # phase_engines:
 #   check: claude
 
+# Model profiles (see models.yaml.example): which model the session and each
+# flow subagent run on. A profile also decides the engine, so `engine` and
+# `phase_engines` only apply to phases without one.
+# profile: claude
+# phase_profiles:
+#   check: claude
+
 # Per-project overrides. Keys are matched against the repo root; the longest
 # matching pattern wins. Globs and ~ are supported.
 projects:
@@ -41,7 +48,7 @@ engines:
     commands_dir: "~/.config/opencode/commands"
     timeout: 7200
     cmd: [opencode, run, --agent, build, "{prompt}"]
-    # To pin a model: set `model:` and add `--model, "{model}"` to cmd.
+    # model: provider/model            # session model; a model profile's `session` overrides it
 
   claude:
     binary: claude
@@ -53,3 +60,9 @@ engines:
     # rejected, so allow the ones your test_command and git workflow need:
     cmd: [claude, -p, "{prompt}", --permission-mode, acceptEdits,
           --allowedTools, "Bash(git:*)", "Bash(pytest:*)", "Bash(python -m pytest:*)"]
+
+  codex:
+    binary: codex
+    invoke: template                   # used through a model profile, whose render supplies the commands
+    timeout: 7200
+    cmd: [codex, exec, --sandbox, workspace-write, "{prompt}"]

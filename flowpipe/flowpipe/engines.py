@@ -38,6 +38,8 @@ class EngineSpec:
     extra_flag: str = ""                 # slash style: CLI flag that carries the operator note
     commands_dir: str = ""               # template style: where flow-<cmd>.md lives
     model: str = ""
+    model_args: list[str] = field(default_factory=list)   # appended when model is set and cmd has no {model}
+    extra_args: list[str] = field(default_factory=list)   # appended always; a model profile's render sets them
     binary: str = ""
     timeout: int = 7200
     env: dict[str, str] = field(default_factory=dict)
@@ -56,7 +58,7 @@ def _render_template(spec: EngineSpec, command: str, slug: str) -> str:
     if not path.exists():
         raise EngineError(
             f"Engine '{spec.name}': command template {path} not found. "
-            f"Run scripts/render-opencode.sh from the flow repo so flow-{command}.md exists."
+            f"Run `flowpipe render <profile-or-platform>` so flow-{command}.md exists."
         )
     text = path.read_text(encoding="utf-8")
     text = re.sub(r"\A\s*---.*?\n---\s*\n", "", text, count=1, flags=re.DOTALL)  # strip frontmatter
@@ -84,7 +86,10 @@ def build_argv(spec: EngineSpec, command: str, slug: str, extra: str = "") -> li
         prompt = _render_template(spec, command, slug)
         if note:
             prompt += f"\n\n{note}"
-    return [p.replace("{model}", spec.model).replace("{prompt}", prompt) for p in spec.cmd] + tail
+    argv = [p.replace("{model}", spec.model).replace("{prompt}", prompt) for p in spec.cmd]
+    if spec.model and not any("{model}" in p for p in spec.cmd):
+        argv += [p.replace("{model}", spec.model) for p in spec.model_args]
+    return argv + spec.extra_args + tail
 
 
 def _log_path(command: str, slug: str) -> Path:

@@ -1,6 +1,6 @@
 [project]
 name = "flowpipe"
-version = "3.2.0"
+version = "3.3.0"
 description = "LangGraph orchestrator for the flow plugin: build, test, check, qa, fix and ship with hash-enforced re-verification and human gates"
 readme = "README.md"
 requires-python = ">=3.10"

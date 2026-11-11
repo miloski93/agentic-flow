@@ -193,3 +193,53 @@ def test_slash_engine_keeps_the_slug_clean_when_a_note_is_attached():
     assert argv[:3] == ["claude", "-p", "/flow:build demo"]
     assert argv[3] == "--append-system-prompt"
     assert "skip the baseline" in argv[4]
+
+
+def test_model_is_passed_with_the_engines_model_args_when_one_is_set():
+    spec = EngineSpec(name="x", invoke="slash", cmd=["x", "{prompt}"], model_args=["--model", "{model}"])
+    assert "--model" not in build_argv(spec, "build", "demo")          # no model: the CLI's own default
+
+    spec.model = "big"
+    assert build_argv(spec, "build", "demo")[-2:] == ["--model", "big"]
+
+
+def test_model_already_placed_in_cmd_is_not_passed_twice():
+    spec = EngineSpec(name="x", invoke="slash", cmd=["x", "--model", "{model}", "{prompt}"],
+                      model="big", model_args=["--model", "{model}"])
+
+    assert build_argv(spec, "build", "demo").count("--model") == 1
+
+
+# ---------------- model profiles ----------------
+
+FAKE_PROFILE = {"platform": "opencode", "engine": "fake", "session": "acme/big", "tiers": {"fast": "acme/small"}}
+
+
+def test_profile_sets_the_session_model_and_renders_its_subagents(pipe):
+    pipe.profiles(main=FAKE_PROFILE)
+    pipe.configure_engine(commands_dir="/nowhere", model_args=["--model", "{model}"])
+    pipe.script(build=[{"do": "tick"}], check=[CLEAR], ship=[{"do": "ship"}])
+    pipe.run(APPROVE_SHIP, "--profile", "main")
+
+    assert pipe.commands_run() == ["build", "check", "ship"]     # prompts came from the render, not /nowhere
+    assert all(c["argv"] == ["--model", "acme/big"] for c in pipe.calls)
+    assert "model: acme/small" in (pipe.rendered / "agents" / "flow-impl.md").read_text(encoding="utf-8")
+
+
+def test_a_phase_can_run_on_its_own_profile(pipe):
+    pipe.profiles(main=FAKE_PROFILE, reviewer={**FAKE_PROFILE, "session": "acme/reviewer"})
+    pipe.configure(profile="main", phase_profiles={"check": "reviewer"})
+    pipe.configure_engine(model_args=["--model", "{model}"])
+    pipe.script(build=[{"do": "tick"}], check=[CLEAR], ship=[{"do": "ship"}])
+    pipe.run(APPROVE_SHIP)
+
+    assert [c["argv"][-1] for c in pipe.calls] == ["acme/big", "acme/reviewer", "acme/big"]
+
+
+def test_unknown_profile_stops_the_run_before_any_work(pipe):
+    pipe.profiles(main=FAKE_PROFILE)
+    pipe.run([], "--profile", "typo")
+
+    assert pipe.exit_code == 1
+    assert "Unknown model profile 'typo'" in pipe.output
+    assert pipe.calls == []

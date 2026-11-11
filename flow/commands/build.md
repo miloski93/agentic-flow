@@ -32,11 +32,16 @@ must never redo finished work.
 STEP 4 - EXECUTE, ONE TASK AT A TIME
 For each remaining task, in plan order:
 
-  a. Pick the implementer from the task's optional **Model:** line:
+  a. Pick the implementer from the task's optional **Model:** line. Its first
+     word names a tier, never a model:
        - no **Model:** line -> flow-impl (inherits the session model)
-       - sonnet -> flow-impl, dispatched on the sonnet model
-       - opus -> flow-impl, dispatched on the opus model
-     Any other value: stop and tell me; never substitute a different model.
+       - fast -> flow-impl-fast
+       - standard -> flow-impl-standard
+       - strong -> flow-impl-strong
+     Any other value: stop and tell me; never guess a tier.
+     If the flow-impl-<tier> agents do not exist here (the plugin is installed
+     without a rendered model profile), use flow-impl for every task and say
+     so once, in one line.
      Dispatch a FRESH subagent of that kind. Give it ONLY:
        - the "## Global Constraints" section
        - the full text of that single task block
@@ -50,9 +55,11 @@ For each remaining task, in plan order:
      task's own commit step specifies, and report one line:
        Task N done | <implementer> | <files touched> | reused: <what> | <tests passing>
 
-  d. On fail: dispatch one fresh subagent of the SAME kind with the failure
-     output appended. If it fails a SECOND time, stop everything and bring me the
-     failure. Never tick a checkbox on a failing verification. Never move on
+  d. On fail: dispatch one fresh subagent ONE TIER UP (flow-impl-fast ->
+     flow-impl-standard -> flow-impl-strong; flow-impl-strong and flow-impl
+     retry as the same kind) with the failure output appended, and name the
+     escalation in the task's report line. If it fails a SECOND time, stop
+     everything and bring me the failure. Never tick a checkbox on a failing verification. Never move on
      to hide a failure.
 
 STEP 5 - NEVER DO THESE

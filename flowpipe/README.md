@@ -7,7 +7,7 @@ interactively, then hand over:
     flowpipe run <slug>
 
 flowpipe contains no prompts of its own. Every phase invokes the flow plugin's
-own command in a headless agent CLI (Claude Code or opencode), and it decides
+own command in a headless agent CLI (Claude Code, opencode or Codex), and it decides
 what happens next from facts it measures itself: plan checkboxes, the test
 suite's exit code, the YAML frontmatter of `check.md` and `qa.md`, and a
 fingerprint of the working tree. It never trusts an agent's summary.
@@ -142,7 +142,8 @@ Then create the config:
     cp flowpipe/flow.yaml.example ~/.config/flowpipe/flow.yaml
 
 Set `test_command` to your project's real full suite. For the opencode engine,
-render the command files first (`bash scripts/render-opencode.sh`).
+render the command files first (`flowpipe render opencode`), or run on a
+[model profile](#model-profiles), which renders by itself.
 
 Check what a repository resolves to:
 
@@ -151,7 +152,7 @@ Check what a repository resolves to:
 
 ## Use
 
-    /flow:shape <idea>          # interactive, in Claude Code or opencode
+    /flow:shape <idea>          # interactive, in your agent CLI
     /flow:plan <slug>           # interactive, approve the plan
     flowpipe run <slug>         # everything from build to ship artifacts
 
@@ -160,6 +161,8 @@ Check what a repository resolves to:
     flowpipe resume <thread>    # continue after Ctrl-C, a reboot, or an engine failure
     flowpipe threads            # list runs
     flowpipe run --engine claude <slug>
+    flowpipe run --profile <name> <slug>   # run on a model profile
+    flowpipe render <profile>   # write a profile's subagents for its platform
 
 Every transition is checkpointed to SQLite. Pressing Ctrl-C at a gate detaches;
 the run waits for `flowpipe resume`. If an engine crashes or times out,
@@ -179,6 +182,8 @@ wins: `$FLOW_CONFIG`, a `flow.yaml` in the current directory, the global file.
 |---------------------|----------------|---------|
 | `engine`            | auto-detect    | engine for every phase; `FLOW_ENGINE` and `--engine` override |
 | `phase_engines`     | none           | per-phase engine, e.g. `{check: claude}` |
+| `profile`           | none           | model profile for every phase; `FLOW_PROFILE` and `--profile` override |
+| `phase_profiles`    | none           | per-phase model profile, e.g. `{check: claude}` |
 | `test_command`      | `pytest -x -q` | the project's full suite |
 | `max_cycles`        | 5              | build/fix/check runs before the cycle gate |
 | `max_task_chars`    | 8000           | size cap for an unfinished plan task block |
@@ -208,6 +213,47 @@ An engine is a command line plus an invocation style:
 Agent CLIs change their flags; the full command line is in `flow.yaml` so a
 renamed flag is a one-line fix.
 
+`model` is the session model. It is substituted for `{model}` in `cmd`; when
+`cmd` has no `{model}`, the engine's `model_args` (default `--model {model}`)
+are appended instead, and only when a model is set.
+
+### Model profiles
+
+A model profile says which model the phase session and each flow subagent run
+on, for one platform. Profiles live in `models.yaml` next to `flow.yaml`
+(`$FLOW_MODELS` overrides the path); the format is described in the
+[main README](../README.md#model-profiles) and in `models.yaml.example`.
+
+    flowpipe run --profile claude <slug>
+
+or `profile: claude` in `flow.yaml`, globally or per project. With a profile
+active, each phase:
+
+1. resolves the profile, taking `phase_profiles` first, so a different model
+   family can review what another one built:
+
+       profile: opencode-api
+       phase_profiles:
+         check: claude
+
+2. renders the plugin for the profile's platform, so the subagents on disk
+   match the plugin source and the profile;
+3. runs the engine the profile names (`engine:` in the profile, default the
+   platform name) with the profile's `session` model. A rendered Claude Code
+   plugin is passed with `--plugin-dir`, and a template engine reads its command
+   files from the render.
+
+A profile decides the engine, so `engine` and `phase_engines` apply only to
+phases without one, and `--engine` on the command line sets the config's
+`profile` aside for that run. An unknown profile, platform or tier stops the run
+at preflight.
+
+`flowpipe render <profile>` does step 2 on its own, for interactive use. A bare
+platform name (`claude`, `opencode`, `codex`) is a profile without models.
+
+The plugin source is found next to the flowpipe package (the repository's
+`flow/` directory); set `FLOW_PLUGIN_DIR` if yours is elsewhere.
+
 ## Running headless: permissions
 
 A headless engine cannot answer a permission prompt, so anything not
@@ -218,6 +264,9 @@ happens, but the allow-list is yours to set:
 - **opencode**: allow what the phases need in `opencode.json` under
   `permission` (`edit`, `bash`). Writes outside the repo are governed by
   `external_directory`; leave it denied and keep engines inside the repo.
+- **Codex**: the built-in engine runs `codex exec --sandbox workspace-write`.
+  Commands that need more (network, a local stack) need a wider sandbox or
+  approval policy in the engine's `cmd`.
 - **Claude Code**: `--permission-mode acceptEdits` approves file edits only.
   Without more, `/flow:build` stalls on its first test run ("This command
   requires approval"). Add the commands your suite and git workflow need via

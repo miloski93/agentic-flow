@@ -5,6 +5,7 @@ from typing import Optional, TypedDict
 class FlowState(TypedDict, total=False):
     slug: str
     engine: str                    # forced engine name or ""
+    profile: str                   # forced model profile or ""
 
     aborted: bool
     abort_reason: str

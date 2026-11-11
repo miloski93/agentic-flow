@@ -46,9 +46,27 @@ class Pipe:
         raw["engines"]["fake"].update(settings)
         self.cfg_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
 
-    def run(self, answers: list[str]) -> None:
+    def run(self, answers: list[str], *args: str) -> None:
         """Run the pipeline, answering each gate from `answers`; detach when they run out."""
-        self._main(["run", SLUG, "--thread", "t1"], answers)
+        self._main(["run", SLUG, "--thread", "t1", *args], answers)
+
+    def profiles(self, **profiles) -> None:
+        """Model profiles for this run, rendered from a stand-in plugin."""
+        tmp = self.cfg_path.parent
+        plugin = tmp / "plugin"
+        (plugin / "agents").mkdir(parents=True)
+        (plugin / "commands").mkdir()
+        (plugin / "agents" / "flow-impl.md").write_text(
+            "---\nname: flow-impl\ndescription: implements\ntools: Read, Edit, Bash\n---\nBODY\n", encoding="utf-8")
+        for name in ("build", "check", "qa", "fix", "ship"):
+            (plugin / "commands" / f"{name}.md").write_text(
+                f"---\ndescription: fake\n---\nFAKE {name} $ARGUMENTS\n", encoding="utf-8")
+        (tmp / "models.yaml").write_text(
+            yaml.safe_dump({"agents": {"flow-impl": "fast"}, "profiles": profiles}), encoding="utf-8")
+        self._monkeypatch.setenv("FLOW_PLUGIN_DIR", str(plugin))
+        self._monkeypatch.setenv("FLOW_MODELS", str(tmp / "models.yaml"))
+        self._monkeypatch.setenv("OPENCODE_ROOT", str(tmp / "opencode"))
+        self.rendered = tmp / "opencode"
 
     def resume(self, answers: list[str]) -> None:
         self._main(["resume", "t1"], answers)

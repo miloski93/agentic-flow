@@ -20,7 +20,7 @@ work = pathlib.Path(".work") / slug
 stdin = "" if sys.stdin is None or sys.stdin.isatty() else sys.stdin.read()
 
 with open(fake / "calls.jsonl", "a", encoding="utf-8") as fh:
-    fh.write(json.dumps({"command": command, "prompt": prompt, "stdin": stdin}) + "\n")
+    fh.write(json.dumps({"command": command, "prompt": prompt, "stdin": stdin, "argv": sys.argv[2:]}) + "\n")
 
 script_path = fake / "script.json"
 script = json.loads(script_path.read_text(encoding="utf-8"))
